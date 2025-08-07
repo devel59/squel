@@ -87,6 +87,7 @@ test['Default query builder options'] =
       separator: ' '
       stringFormatter: null
       rawNesting: false
+      formatIdentifier: null
     }, squel.cls.DefaultQueryBuilderOptions
 
 
@@ -330,7 +331,7 @@ test['Builder base class'] =
 
     'if neither expression, builder nor String': ->
       testFn = => @inst._sanitizeExpression(1)
-      assert.throws testFn, 'expression must be a string or builder instance'
+      assert.throws testFn, 'expression must be a string or builder instance'
 
 
   '_sanitizeName':

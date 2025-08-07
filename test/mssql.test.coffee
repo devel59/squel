@@ -157,6 +157,7 @@ test['MSSQL flavour'] =
       separator: ' '
       stringFormatter: null
       rawNesting: false
+      formatIdentifier: null
     }, squel.cls.DefaultQueryBuilderOptions
 
 module?.exports[require('path').basename(__filename)] = test

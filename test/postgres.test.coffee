@@ -319,7 +319,99 @@ test['Postgres flavour'] =
       separator: ' '
       stringFormatter: null
       rawNesting: false
+      formatIdentifier: squel.cls.DefaultQueryBuilderOptions.formatIdentifier
     }, squel.cls.DefaultQueryBuilderOptions
+
+  'Identifier sanitization':
+    'valid identifiers - lowercase letters, underscores, numbers':
+      'simple lowercase identifier':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('table_name')
+        'should not add quotes': -> assert.same @result, 'table_name'
+
+      'identifier with underscore':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user_id')
+        'should not add quotes': -> assert.same @result, 'user_id'
+
+      'identifier starting with underscore':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('_private')
+        'should not add quotes': -> assert.same @result, '_private'
+
+      'identifier with numbers':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('table123')
+        'should not add quotes': -> assert.same @result, 'table123'
+
+    'invalid identifiers - should be quoted':
+      'uppercase letters':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('TableName')
+        'should add quotes': -> assert.same @result, '"TableName"'
+
+      'mixed case':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('userName')
+        'should add quotes': -> assert.same @result, '"userName"'
+
+      'identifier with spaces':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user name')
+        'should add quotes': -> assert.same @result, '"user name"'
+
+      'identifier with hyphen':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user-id')
+        'should add quotes': -> assert.same @result, '"user-id"'
+
+      'identifier with special characters':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user@domain')
+        'should add quotes': -> assert.same @result, '"user@domain"'
+
+      'identifier starting with number':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('123table')
+        'should add quotes': -> assert.same @result, '"123table"'
+
+    'quote escaping':
+      'identifier with single double quote':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user"name')
+        'should escape quotes': -> assert.same @result, '"user""name"'
+
+      'identifier with multiple double quotes':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user""name""test')
+        'should escape all quotes': -> assert.same @result, '"user""""name""""test"'
+
+      'identifier with quotes and spaces':
+        beforeEach: -> @result = squel.cls.DefaultQueryBuilderOptions.formatIdentifier('user "name" test')
+        'should escape quotes and add outer quotes': -> assert.same @result, '"user ""name"" test"'
+
+  'Identifier sanitization in queries':
+    beforeEach: ->
+      @sel = squel.select()
+      @ins = squel.insert()
+      @upd = squel.update()
+      @del = squel.delete()
+
+    'SELECT with uppercase table name':
+      beforeEach: -> @sel.from('UserTable').field('id')
+      toString: -> assert.same @sel.toString(), 'SELECT id FROM "UserTable"'
+
+    'SELECT with mixed case field name':
+      beforeEach: -> @sel.from('users').field('firstName')
+      toString: -> assert.same @sel.toString(), 'SELECT "firstName" FROM users'
+
+    'INSERT with special characters in table name':
+      beforeEach: -> @ins.into('user-data').set('id', 1)
+      toString: -> assert.same @ins.toString(), 'INSERT INTO "user-data" (id) VALUES (1)'
+
+    'UPDATE with spaces in field name':
+      beforeEach: -> @upd.table('users').set('full name', 'John Doe')
+      toString: -> assert.same @upd.toString(), 'UPDATE users SET "full name" = \'John Doe\''
+
+    'DELETE with quoted identifier':
+      beforeEach: -> @del.from('UserData').where('user"id = ?', 1)
+      toString: -> assert.same @del.toString(), 'DELETE FROM "UserData" WHERE (user"id = 1)'
+
+    'SELECT with asterisk':
+      beforeEach: -> @sel.from('users').field('*')
+      toString: -> assert.same @sel.toString(), 'SELECT * FROM users'
+
+    'SELECT with asterisk in the middle':
+      beforeEach: -> @sel.from('users').field('user*name')
+      toString: -> assert.same @sel.toString(), 'SELECT "user*name" FROM users'
 
 
 module?.exports[require('path').basename(__filename)] = test

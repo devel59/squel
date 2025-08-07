@@ -224,7 +224,9 @@ function _buildSquel() {
     // Function for formatting string values prior to insertion into query string
     stringFormatter: null,
     // Whether to prevent the addition of brackets () when nesting this query builder's output
-    rawNesting: false
+    rawNesting: false,
+    // Function for formatting identifiers
+    formatIdentifier: null
   };
 
   // Global custom value handlers for all instances of builder
@@ -288,9 +290,8 @@ function _buildSquel() {
 
       var defaults = JSON.parse(JSON.stringify(cls.DefaultQueryBuilderOptions));
       // for function values, etc we need to manually copy
-      ['stringFormatter'].forEach(function (p) {
-        defaults[p] = cls.DefaultQueryBuilderOptions[p];
-      });
+      defaults.stringFormatter = cls.DefaultQueryBuilderOptions.stringFormatter;
+      defaults.formatIdentifier = cls.DefaultQueryBuilderOptions.formatIdentifier;
 
       _this.options = _extend({}, defaults, options);
       return _this;
@@ -321,7 +322,7 @@ function _buildSquel() {
         if (!cls.isSquelBuilder(expr)) {
           // It must then be a string
           if (typeof expr !== "string") {
-            throw new Error("expression must be a string or builder instance");
+            throw new Error("expression must be a string or builder instance");
           }
         }
 
@@ -347,7 +348,7 @@ function _buildSquel() {
       key: '_sanitizeField',
       value: function _sanitizeField(item) {
         if (!cls.isSquelBuilder(item)) {
-          item = this._sanitizeName(item, "field name");
+          return this._sanitizeName(item, "field name");
         }
 
         return item;
@@ -364,17 +365,15 @@ function _buildSquel() {
     }, {
       key: '_sanitizeTable',
       value: function _sanitizeTable(item) {
-        if (typeof item !== "string") {
-          try {
-            item = this._sanitizeBaseBuilder(item);
-          } catch (e) {
-            throw new Error("table name must be a string or a builder");
-          }
-        } else {
-          item = this._sanitizeName(item, 'table');
+        if (typeof item === 'string') {
+          return this._sanitizeName(item, 'table');
         }
 
-        return item;
+        try {
+          return this._sanitizeBaseBuilder(item);
+        } catch (e) {
+          throw new Error("table name must be a string or a builder");
+        }
       }
     }, {
       key: '_sanitizeTableAlias',
@@ -435,7 +434,9 @@ function _buildSquel() {
     }, {
       key: '_formatTableName',
       value: function _formatTableName(item) {
-        if (this.options.autoQuoteTableNames) {
+        if (this.options.formatIdentifier) {
+          item = this.options.formatIdentifier(item);
+        } else if (this.options.autoQuoteTableNames) {
           var quoteChar = this.options.nameQuoteCharacter;
 
           item = '' + quoteChar + item + quoteChar;
@@ -468,9 +469,22 @@ function _buildSquel() {
     }, {
       key: '_formatFieldName',
       value: function _formatFieldName(item) {
+        var _this2 = this;
+
         var formattingOptions = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
 
-        if (this.options.autoQuoteFieldNames) {
+        if (this.options.formatIdentifier) {
+          if (formattingOptions.ignorePeriodsForFieldNameQuotes) {
+            // a.b.c -> "a.b.c" (sanitized as single identifier)
+            item = this.options.formatIdentifier(item);
+          } else {
+            // a.b.c -> "a"."b"."c" (sanitized individually)
+            item = item.split('.').map(function (v) {
+              // treat '*' as special case (#79)
+              return '*' === v ? v : _this2.options.formatIdentifier(v);
+            }).join('.');
+          }
+        } else if (this.options.autoQuoteFieldNames) {
           var quoteChar = this.options.nameQuoteCharacter;
 
           if (formattingOptions.ignorePeriodsForFieldNameQuotes) {
@@ -524,13 +538,13 @@ function _buildSquel() {
     }, {
       key: '_formatValueForParamArray',
       value: function _formatValueForParamArray(value) {
-        var _this2 = this;
+        var _this3 = this;
 
         var formattingOptions = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
 
         if (_isArray(value)) {
           return value.map(function (v) {
-            return _this2._formatValueForParamArray(v, formattingOptions);
+            return _this3._formatValueForParamArray(v, formattingOptions);
           });
         } else {
           return this._formatCustomValue(value, true, formattingOptions).value;
@@ -544,7 +558,7 @@ function _buildSquel() {
     }, {
       key: '_formatValueForQueryString',
       value: function _formatValueForQueryString(initialValue) {
-        var _this3 = this;
+        var _this4 = this;
 
         var formattingOptions = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
 
@@ -568,7 +582,7 @@ function _buildSquel() {
         // if it's an array then format each element separately
         if (_isArray(value)) {
           value = value.map(function (v) {
-            return _this3._formatValueForQueryString(v);
+            return _this4._formatValueForQueryString(v);
           });
 
           value = this._applyNestingFormatting(value.join(', '), _shouldApplyNesting(value));
@@ -842,10 +856,10 @@ function _buildSquel() {
     function _class3(options) {
       _classCallCheck(this, _class3);
 
-      var _this4 = _possibleConstructorReturn(this, (_class3.__proto__ || Object.getPrototypeOf(_class3)).call(this, options));
+      var _this5 = _possibleConstructorReturn(this, (_class3.__proto__ || Object.getPrototypeOf(_class3)).call(this, options));
 
-      _this4._nodes = [];
-      return _this4;
+      _this5._nodes = [];
+      return _this5;
     }
 
     // Combine the current expression with the given expression using the intersection operator (AND).
@@ -973,7 +987,7 @@ function _buildSquel() {
 
       _classCallCheck(this, _class4);
 
-      var _this5 = _possibleConstructorReturn(this, (_class4.__proto__ || Object.getPrototypeOf(_class4)).call(this, options));
+      var _this6 = _possibleConstructorReturn(this, (_class4.__proto__ || Object.getPrototypeOf(_class4)).call(this, options));
 
       if (_isPlainObject(fieldName)) {
         options = fieldName;
@@ -982,14 +996,14 @@ function _buildSquel() {
       }
 
       if (fieldName) {
-        _this5._fieldName = _this5._sanitizeField(fieldName);
+        _this6._fieldName = _this6._sanitizeField(fieldName);
       }
 
-      _this5.options = _extend({}, cls.DefaultQueryBuilderOptions, options);
+      _this6.options = _extend({}, cls.DefaultQueryBuilderOptions, options);
 
-      _this5._cases = [];
-      _this5._elseValue = null;
-      return _this5;
+      _this6._cases = [];
+      _this6._elseValue = null;
+      return _this6;
     }
 
     _createClass(_class4, [{
@@ -1163,10 +1177,10 @@ function _buildSquel() {
     function _class6(options, str) {
       _classCallCheck(this, _class6);
 
-      var _this7 = _possibleConstructorReturn(this, (_class6.__proto__ || Object.getPrototypeOf(_class6)).call(this, options));
+      var _this8 = _possibleConstructorReturn(this, (_class6.__proto__ || Object.getPrototypeOf(_class6)).call(this, options));
 
-      _this7._str = str;
-      return _this7;
+      _this8._str = str;
+      return _this8;
     }
 
     _createClass(_class6, [{
@@ -1191,11 +1205,11 @@ function _buildSquel() {
     function _class7(options) {
       _classCallCheck(this, _class7);
 
-      var _this8 = _possibleConstructorReturn(this, (_class7.__proto__ || Object.getPrototypeOf(_class7)).call(this, options));
+      var _this9 = _possibleConstructorReturn(this, (_class7.__proto__ || Object.getPrototypeOf(_class7)).call(this, options));
 
-      _this8._strings = [];
-      _this8._values = [];
-      return _this8;
+      _this9._strings = [];
+      _this9._values = [];
+      return _this9;
     }
 
     _createClass(_class7, [{
@@ -1241,10 +1255,10 @@ function _buildSquel() {
     function _class8(options, prefix) {
       _classCallCheck(this, _class8);
 
-      var _this9 = _possibleConstructorReturn(this, (_class8.__proto__ || Object.getPrototypeOf(_class8)).call(this, options));
+      var _this10 = _possibleConstructorReturn(this, (_class8.__proto__ || Object.getPrototypeOf(_class8)).call(this, options));
 
-      _this9._tables = [];
-      return _this9;
+      _this10._tables = [];
+      return _this10;
     }
 
     /**
@@ -1480,10 +1494,10 @@ function _buildSquel() {
     function _class13(options) {
       _classCallCheck(this, _class13);
 
-      var _this14 = _possibleConstructorReturn(this, (_class13.__proto__ || Object.getPrototypeOf(_class13)).call(this, options));
+      var _this15 = _possibleConstructorReturn(this, (_class13.__proto__ || Object.getPrototypeOf(_class13)).call(this, options));
 
-      _this14._fields = [];
-      return _this14;
+      _this15._fields = [];
+      return _this15;
     }
 
     /**
@@ -1655,10 +1669,10 @@ function _buildSquel() {
     function _class14(options) {
       _classCallCheck(this, _class14);
 
-      var _this15 = _possibleConstructorReturn(this, (_class14.__proto__ || Object.getPrototypeOf(_class14)).call(this, options));
+      var _this16 = _possibleConstructorReturn(this, (_class14.__proto__ || Object.getPrototypeOf(_class14)).call(this, options));
 
-      _this15._reset();
-      return _this15;
+      _this16._reset();
+      return _this16;
     }
 
     _createClass(_class14, [{
@@ -1866,14 +1880,14 @@ function _buildSquel() {
     }, {
       key: '_toParamString',
       value: function _toParamString() {
-        var _this18 = this;
+        var _this19 = this;
 
         var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
         var buildParameterized = options.buildParameterized;
 
 
         var fieldString = this._fields.map(function (f) {
-          return _this18._formatFieldName(f);
+          return _this19._formatFieldName(f);
         }).join(', ');
 
         var valueStrings = [],
@@ -1914,20 +1928,20 @@ function _buildSquel() {
     function _class17(options) {
       _classCallCheck(this, _class17);
 
-      var _this19 = _possibleConstructorReturn(this, (_class17.__proto__ || Object.getPrototypeOf(_class17)).call(this, options));
+      var _this20 = _possibleConstructorReturn(this, (_class17.__proto__ || Object.getPrototypeOf(_class17)).call(this, options));
 
-      _this19._fields = [];
-      _this19._query = null;
-      return _this19;
+      _this20._fields = [];
+      _this20._query = null;
+      return _this20;
     }
 
     _createClass(_class17, [{
       key: 'fromQuery',
       value: function fromQuery(fields, selectQuery) {
-        var _this20 = this;
+        var _this21 = this;
 
         this._fields = fields.map(function (v) {
-          return _this20._sanitizeField(v);
+          return _this21._sanitizeField(v);
         });
 
         this._query = this._sanitizeBaseBuilder(selectQuery);
@@ -1999,10 +2013,10 @@ function _buildSquel() {
     function _class19(options) {
       _classCallCheck(this, _class19);
 
-      var _this22 = _possibleConstructorReturn(this, (_class19.__proto__ || Object.getPrototypeOf(_class19)).call(this, options));
+      var _this23 = _possibleConstructorReturn(this, (_class19.__proto__ || Object.getPrototypeOf(_class19)).call(this, options));
 
-      _this22._groups = [];
-      return _this22;
+      _this23._groups = [];
+      return _this23;
     }
 
     // Add a GROUP BY transformation for the given field.
@@ -2037,10 +2051,10 @@ function _buildSquel() {
     function _class20(options) {
       _classCallCheck(this, _class20);
 
-      var _this23 = _possibleConstructorReturn(this, (_class20.__proto__ || Object.getPrototypeOf(_class20)).call(this, options));
+      var _this24 = _possibleConstructorReturn(this, (_class20.__proto__ || Object.getPrototypeOf(_class20)).call(this, options));
 
-      _this23._value = null;
-      return _this23;
+      _this24._value = null;
+      return _this24;
     }
 
     _createClass(_class20, [{
@@ -2134,10 +2148,10 @@ function _buildSquel() {
     function _class23(options) {
       _classCallCheck(this, _class23);
 
-      var _this26 = _possibleConstructorReturn(this, (_class23.__proto__ || Object.getPrototypeOf(_class23)).call(this, options));
+      var _this27 = _possibleConstructorReturn(this, (_class23.__proto__ || Object.getPrototypeOf(_class23)).call(this, options));
 
-      _this26._conditions = [];
-      return _this26;
+      _this27._conditions = [];
+      return _this27;
     }
 
     /**
@@ -2283,10 +2297,10 @@ function _buildSquel() {
     function _class26(options) {
       _classCallCheck(this, _class26);
 
-      var _this29 = _possibleConstructorReturn(this, (_class26.__proto__ || Object.getPrototypeOf(_class26)).call(this, options));
+      var _this30 = _possibleConstructorReturn(this, (_class26.__proto__ || Object.getPrototypeOf(_class26)).call(this, options));
 
-      _this29._orders = [];
-      return _this29;
+      _this30._orders = [];
+      return _this30;
     }
 
     /**
@@ -2384,10 +2398,10 @@ function _buildSquel() {
     function _class27(options) {
       _classCallCheck(this, _class27);
 
-      var _this30 = _possibleConstructorReturn(this, (_class27.__proto__ || Object.getPrototypeOf(_class27)).call(this, options));
+      var _this31 = _possibleConstructorReturn(this, (_class27.__proto__ || Object.getPrototypeOf(_class27)).call(this, options));
 
-      _this30._joins = [];
-      return _this30;
+      _this31._joins = [];
+      return _this31;
     }
 
     /**
@@ -2567,10 +2581,10 @@ function _buildSquel() {
     function _class28(options) {
       _classCallCheck(this, _class28);
 
-      var _this31 = _possibleConstructorReturn(this, (_class28.__proto__ || Object.getPrototypeOf(_class28)).call(this, options));
+      var _this32 = _possibleConstructorReturn(this, (_class28.__proto__ || Object.getPrototypeOf(_class28)).call(this, options));
 
-      _this31._unions = [];
-      return _this31;
+      _this32._unions = [];
+      return _this32;
     }
 
     /**
@@ -2691,9 +2705,9 @@ function _buildSquel() {
     function _class29(options, blocks) {
       _classCallCheck(this, _class29);
 
-      var _this32 = _possibleConstructorReturn(this, (_class29.__proto__ || Object.getPrototypeOf(_class29)).call(this, options));
+      var _this33 = _possibleConstructorReturn(this, (_class29.__proto__ || Object.getPrototypeOf(_class29)).call(this, options));
 
-      _this32.blocks = blocks || [];
+      _this33.blocks = blocks || [];
 
       // Copy exposed methods into myself
       var _iteratorNormalCompletion12 = true;
@@ -2701,7 +2715,7 @@ function _buildSquel() {
       var _iteratorError12 = undefined;
 
       try {
-        for (var _iterator12 = _this32.blocks[Symbol.iterator](), _step12; !(_iteratorNormalCompletion12 = (_step12 = _iterator12.next()).done); _iteratorNormalCompletion12 = true) {
+        for (var _iterator12 = _this33.blocks[Symbol.iterator](), _step12; !(_iteratorNormalCompletion12 = (_step12 = _iterator12.next()).done); _iteratorNormalCompletion12 = true) {
           var block = _step12.value;
 
           var exposedMethods = block.exposedMethods();
@@ -2709,19 +2723,19 @@ function _buildSquel() {
           for (var methodName in exposedMethods) {
             var methodBody = exposedMethods[methodName];
 
-            if (undefined !== _this32[methodName]) {
+            if (undefined !== _this33[methodName]) {
               throw new Error('Builder already has a builder method called: ' + methodName);
             }
 
             (function (block, name, body) {
-              _this32[name] = function () {
+              _this33[name] = function () {
                 for (var _len10 = arguments.length, args = Array(_len10), _key10 = 0; _key10 < _len10; _key10++) {
                   args[_key10] = arguments[_key10];
                 }
 
                 body.call.apply(body, [block].concat(args));
 
-                return _this32;
+                return _this33;
               };
             })(block, methodName, methodBody);
           }
@@ -2741,7 +2755,7 @@ function _buildSquel() {
         }
       }
 
-      return _this32;
+      return _this33;
     }
 
     /**
@@ -2827,7 +2841,7 @@ function _buildSquel() {
     }, {
       key: '_toParamString',
       value: function _toParamString() {
-        var _this33 = this;
+        var _this34 = this;
 
         var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 
@@ -2836,7 +2850,7 @@ function _buildSquel() {
         var blockResults = this.blocks.map(function (b) {
           return b._toParamString({
             buildParameterized: options.buildParameterized,
-            queryBuilder: _this33
+            queryBuilder: _this34
           });
         });
 

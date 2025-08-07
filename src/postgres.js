@@ -1,7 +1,7 @@
 const validIdentifierRegex = /^[a-z_][a-z0-9_]*$/;
 const doubleQuoteRegex = /"/g;
 
-function sanitizeIdentifier(value) {
+function formatIdentifier(value) {
   if (validIdentifierRegex.test(value)) {
     return value;
   }
@@ -18,7 +18,7 @@ squel.flavours['postgres'] = function(_squel) {
   cls.DefaultQueryBuilderOptions.numberedParametersStartAt = 1;
   cls.DefaultQueryBuilderOptions.autoQuoteAliasNames = false;
   cls.DefaultQueryBuilderOptions.useAsForTableAliasNames = true;
-  cls.DefaultQueryBuilderOptions.sanitizeIdentifier = sanitizeIdentifier;
+  cls.DefaultQueryBuilderOptions.formatIdentifier = formatIdentifier;
 
   cls.PostgresOnConflictKeyUpdateBlock = class extends cls.AbstractSetFieldBlock {
     onConflict (conflictFields, fields) {

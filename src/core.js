@@ -162,8 +162,8 @@ function _buildSquel(flavour = null) {
     stringFormatter: null,
     // Whether to prevent the addition of brackets () when nesting this query builder's output
     rawNesting: false,
-    // Function for sanitizing identifiers
-    sanitizeIdentifier: null,
+    // Function for formatting identifiers
+    formatIdentifier: null,
   };
 
   // Global custom value handlers for all instances of builder
@@ -218,6 +218,7 @@ function _buildSquel(flavour = null) {
       let defaults = JSON.parse(JSON.stringify(cls.DefaultQueryBuilderOptions));
       // for function values, etc we need to manually copy
       defaults.stringFormatter = cls.DefaultQueryBuilderOptions.stringFormatter;
+      defaults.formatIdentifier = cls.DefaultQueryBuilderOptions.formatIdentifier;
 
       this.options = _extend({}, defaults, options);
     }
@@ -260,17 +261,13 @@ function _buildSquel(flavour = null) {
         throw new Error(`${type} must be a string`);
       }
 
-      if (this.options.sanitizeIdentifier) {
-        return this.options.sanitizeIdentifier(value);
-      }
-
       return value;
     }
 
 
     _sanitizeField (item) {
       if (!(cls.isSquelBuilder(item))) {
-        item = this._sanitizeName(item, "field name");
+        return this._sanitizeName(item, "field name");
       }
 
       return item;
@@ -354,8 +351,10 @@ function _buildSquel(flavour = null) {
     }
 
 
-    _formatTableName (item) {
-      if (this.options.autoQuoteTableNames) {
+    _formatTableName(item) {
+      if (this.options.formatIdentifier) {
+        item = this.options.formatIdentifier(item);
+      } else if (this.options.autoQuoteTableNames) {
         const quoteChar = this.options.nameQuoteCharacter;
 
         item = `${quoteChar}${item}${quoteChar}`;
@@ -389,8 +388,22 @@ function _buildSquel(flavour = null) {
     }
 
 
-    _formatFieldName (item, formattingOptions = {}) {
-      if (this.options.autoQuoteFieldNames) {
+    _formatFieldName(item, formattingOptions = {}) {
+      if (this.options.formatIdentifier) {
+        if (formattingOptions.ignorePeriodsForFieldNameQuotes) {
+          // a.b.c -> "a.b.c" (sanitized as single identifier)
+          item = this.options.formatIdentifier(item);
+        } else {
+          // a.b.c -> "a"."b"."c" (sanitized individually)
+          item = item
+            .split('.')
+            .map((v) => {
+              // treat '*' as special case (#79)
+              return ('*' === v ? v : this.options.formatIdentifier(v));
+            })
+            .join('.');
+        }
+      } else if (this.options.autoQuoteFieldNames) {
         let quoteChar = this.options.nameQuoteCharacter;
 
         if (formattingOptions.ignorePeriodsForFieldNameQuotes) {
@@ -400,11 +413,11 @@ function _buildSquel(flavour = null) {
           // a.b.c -> `a`.`b`.`c`
           item = item
             .split('.')
-            .map(function(v) {
+            .map(function (v) {
               // treat '*' as special case (#79)
               return ('*' === v ? v : `${quoteChar}${v}${quoteChar}`);
             })
-            .join('.')
+            .join('.');
         }
       }
 
