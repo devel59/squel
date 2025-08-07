@@ -1,3 +1,15 @@
+const validIdentifierRegex = /^[a-z_][a-z0-9_]*$/;
+const doubleQuoteRegex = /"/g;
+
+function sanitizeIdentifier(value) {
+  if (validIdentifierRegex.test(value)) {
+    return value;
+  }
+
+  return '"' + value.replace(doubleQuoteRegex, '""') + '"';
+}
+
+
 // This file contains additional Squel commands for use with the Postgres DB engine
 squel.flavours['postgres'] = function(_squel) {
   let cls = _squel.cls;
@@ -6,6 +18,7 @@ squel.flavours['postgres'] = function(_squel) {
   cls.DefaultQueryBuilderOptions.numberedParametersStartAt = 1;
   cls.DefaultQueryBuilderOptions.autoQuoteAliasNames = false;
   cls.DefaultQueryBuilderOptions.useAsForTableAliasNames = true;
+  cls.DefaultQueryBuilderOptions.sanitizeIdentifier = sanitizeIdentifier;
 
   cls.PostgresOnConflictKeyUpdateBlock = class extends cls.AbstractSetFieldBlock {
     onConflict (conflictFields, fields) {

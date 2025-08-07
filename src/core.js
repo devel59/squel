@@ -161,7 +161,9 @@ function _buildSquel(flavour = null) {
     // Function for formatting string values prior to insertion into query string
     stringFormatter: null,
     // Whether to prevent the addition of brackets () when nesting this query builder's output
-    rawNesting: false
+    rawNesting: false,
+    // Function for sanitizing identifiers
+    sanitizeIdentifier: null,
   };
 
   // Global custom value handlers for all instances of builder
@@ -215,9 +217,7 @@ function _buildSquel(flavour = null) {
 
       let defaults = JSON.parse(JSON.stringify(cls.DefaultQueryBuilderOptions));
       // for function values, etc we need to manually copy
-      ['stringFormatter'].forEach(p => {
-        defaults[p] = cls.DefaultQueryBuilderOptions[p]
-      })
+      defaults.stringFormatter = cls.DefaultQueryBuilderOptions.stringFormatter;
 
       this.options = _extend({}, defaults, options);
     }
@@ -241,7 +241,7 @@ function _buildSquel(flavour = null) {
       if (!(cls.isSquelBuilder(expr))) {
         // It must then be a string
         if (typeof expr !== "string") {
-          throw new Error("expression must be a string or builder instance");
+          throw new Error("expression must be a string or builder instance");
         }
       }
 
@@ -258,6 +258,10 @@ function _buildSquel(flavour = null) {
     _sanitizeName (value, type) {
       if (typeof value !== "string") {
         throw new Error(`${type} must be a string`);
+      }
+
+      if (this.options.sanitizeIdentifier) {
+        return this.options.sanitizeIdentifier(value);
       }
 
       return value;
@@ -283,17 +287,15 @@ function _buildSquel(flavour = null) {
 
 
     _sanitizeTable (item) {
-      if (typeof item !== "string") {
-        try {
-          item = this._sanitizeBaseBuilder(item);
-        } catch (e) {
-          throw new Error("table name must be a string or a builder");
-        }
-      } else {
-        item = this._sanitizeName(item, 'table');
+      if (typeof item === 'string') {
+        return this._sanitizeName(item, 'table');
       }
 
-      return item;
+      try {
+        return this._sanitizeBaseBuilder(item);
+      } catch (e) {
+        throw new Error("table name must be a string or a builder");
+      }
     }
 
     _sanitizeTableAlias (item) {
